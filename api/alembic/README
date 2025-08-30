@@ -1,0 +1,16 @@
+Generic single-database configuration.
+
+
+
+alembic init alembic
+
+alembic revision --autogenerate -m "初始化数据库"
+
+
+alembic upgrade head
+
+
+常用命令
+回退到上一个版本：alembic downgrade -1
+查看当前版本：alembic current
+查看历史：alembic history
