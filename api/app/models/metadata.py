@@ -56,6 +56,17 @@ class MetaDataTableColumn(Base):
     
 
 # Pydantic models for API requests and responses
+class MetaDataTableColumnCreate(BaseModel):
+    """创建元数据表字段的请求模型"""
+    column_name: str
+    display_name: Optional[str] = None
+    data_type: str
+    ordinal_position: int
+    is_nullable: Optional[str] = None
+    column_default: Optional[str] = None
+    description: Optional[str] = None
+
+
 class MetaDataTableCreate(BaseModel):
     """创建元数据表的请求模型"""
     name: str  # 资源名称
@@ -64,6 +75,7 @@ class MetaDataTableCreate(BaseModel):
     description: Optional[str] = None
     connection_id: uuid.UUID
     display_name: Optional[str] = None
+    columns: List[MetaDataTableColumnCreate] = []
 
 
 class MetaDataTableUpdate(BaseModel):
@@ -89,17 +101,6 @@ class MetaDataTableRead(BaseModel):
     type: ResourcesType
     state: ResourcesState
     created_by: uuid.UUID
-
-
-class MetaDataTableColumnCreate(BaseModel):
-    """创建元数据表字段的请求模型"""
-    column_name: str
-    display_name: Optional[str] = None
-    data_type: str
-    ordinal_position: int
-    is_nullable: Optional[str] = None
-    column_default: Optional[str] = None
-    description: Optional[str] = None
 
 
 class MetaDataTableColumnUpdate(BaseModel):

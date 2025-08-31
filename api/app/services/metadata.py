@@ -25,7 +25,7 @@ from app.models.metadata import (
     MetaDataTableColumnCreate,
     MetaDataTableColumnUpdate
 )
-from app.models.resources import ResourcesType, ResourcesState
+from app.models.connections import DataBaseConnection, DataConnectionRead
 from app.services.resources import ResourcesService
 
 
@@ -43,8 +43,12 @@ class MetaDataTableService:
         """
         self.db = db
         self.resources_service = ResourcesService(db)
+        self.connection_sessions = None  # 假设有一个连接服务类，用于管理数据库连接
 
-    async def create_metadata_table(self, table_data: MetaDataTableCreate, user_id: uuid.UUID) -> MetaDataTableRead:
+    async def create_metadata_table(self, 
+                                    resource_id: Optional[uuid.UUID],
+                                    table_data: MetaDataTableCreate, 
+                                    user_id: uuid.UUID) -> MetaDataTableRead:
         """
         创建新的元数据表
 
@@ -55,22 +59,25 @@ class MetaDataTableService:
         Returns:
             MetaDataTable: 创建后的元数据表对象
         """
-        # 先创建资源
-        resource = await self.resources_service.create_resource(
-            name=table_data.name,
-            type=ResourcesType.METADATA,
-            user_id=user_id,
-            state=ResourcesState.ACTIVE
-        )
+        # 先创建资源，
+        # resource = await self.resources_service.create_resource(
+        #     name=table_data.name,
+        #     type=ResourcesType.METADATA,
+        #     user_id=user_id,
+        #     state=ResourcesState.ACTIVE
+        # )
         
+        #这个框架会自动处理资源的创建和关联
+
         # 创建元数据表记录
         db_table = MetaDataTable(
-            id=resource.id,
+            id=resource_id,
             database_name=table_data.database_name,
             table_name=table_data.table_name,
             description=table_data.description,
             connection_id=table_data.connection_id,
-            display_name=table_data.display_name
+            display_name=table_data.display_name,
+            user_id=user_id,
         )
         
         self.db.add(db_table)
@@ -230,6 +237,107 @@ class MetaDataTableService:
         )
 
         return [MetaDataTableColumnRead.model_validate(col) for col in db_columns]
+    
+    
+    async def get_table_columns_info_by_(self, 
+                                         connection_id: Optional[uuid.UUID], 
+                                         table_name: Optional[str], 
+                                         schema_name: Optional[str], 
+                                         database_name: Optional[str]):
+        """
+        根据数据库的原始信息读取字段
+        
+        Args:
+            table_name
+            schema_name: 针对Postgresql
+            database_name:
+
+        """
+        db_connections = await self.db.execute(
+            select(DataBaseConnection).where(DataBaseConnection.id == connection_id)
+        )
+        db_config: DataConnectionRead = db_connections.scalar_one_or_none()
+        if not db_config:
+            return None
+        
+        # 根据连接类型创建相应数据库引擎
+        engine = None
+        try:
+            if db_config.db_type == "postgresql":
+                from sqlalchemy import create_engine
+                connection_url = f"postgresql://{db_config.username}:{db_config.password}@{db_config.host}:{db_config.port}/{database_name or db_config.database_name}"
+                engine = create_engine(connection_url)
+            elif db_config.db_type == "mysql":
+                from sqlalchemy import create_engine
+                connection_url = f"mysql+pymysql://{db_config.username}:{db_config.password}@{db_config.host}:{db_config.port}/{database_name or db_config.database_name}"
+                engine = create_engine(connection_url)
+            # 可以根据需要添加其他数据库类型支持
+            
+            if not engine:
+                raise ValueError(f"Unsupported database type: {db_config.db_type}")
+                
+            # 查询表的字段信息
+            with engine.connect() as conn:
+                from sqlalchemy import text
+                
+                # 构建查询字段信息的SQL语句
+                if db_config.db_type == "postgresql":
+                    sql = """
+                        SELECT 
+                            column_name,
+                            data_type,
+                            ordinal_position,
+                            is_nullable,
+                            column_default
+                        FROM information_schema.columns 
+                        WHERE table_name = :table_name
+                        AND table_schema = :schema_name
+                        ORDER BY ordinal_position
+                    """
+                    schema = schema_name or 'public'
+                else:  # mysql等其他数据库
+                    sql = """
+                        SELECT 
+                            column_name,
+                            data_type,
+                            ordinal_position,
+                            is_nullable,
+                            column_default
+                        FROM information_schema.columns 
+                        WHERE table_name = :table_name
+                        AND table_schema = :database_name
+                        ORDER BY ordinal_position
+                    """
+                    schema = database_name or db_config.database_name
+                    
+                result = conn.execute(text(sql), {
+                    "table_name": table_name,
+                    "schema_name": schema,
+                    "database_name": schema
+                })
+                
+                # 将查询结果转换为字段创建模型
+                columns = []
+                for row in result:
+                    column = MetaDataTableColumnCreate(
+                        column_name=row.column_name,
+                        data_type=row.data_type,
+                        ordinal_position=row.ordinal_position,
+                        is_nullable=row.is_nullable,
+                        column_default=row.column_default
+                    )
+                    columns.append(column)
+                    
+                return columns
+                
+        except Exception as e:
+            # 处理连接或查询异常
+            print(f"Error connecting to database or querying columns: {str(e)}")
+            return None
+        finally:
+            # 关闭引擎连接
+            if engine:
+                engine.dispose()
     async def update_table_column(self, seq: int, column_update: MetaDataTableColumnUpdate) -> Optional[MetaDataTableColumnRead]:
         """
         更新元数据表字段信息
@@ -277,3 +385,4 @@ class MetaDataTableService:
         await self.db.delete(db_column)
         await self.db.commit()
         return True
+    

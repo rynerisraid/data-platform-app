@@ -47,7 +47,7 @@ async def create_metadata_table(
     创建元数据表
     
     Args:
-        table_data: 元数据表创建信息
+        table_data: 元数据表创建信息（包括字段信息）
         db: 数据库会话依赖
         current_user: 当前登录用户信息
         
@@ -55,8 +55,19 @@ async def create_metadata_table(
         BaseResponse[MetaDataTableRead]: 创建的元数据表信息
     """
     service = MetaDataTableService(db)
+    resource_id = uuid.uuid4()  # 生成新的资源ID
     try:
-        db_table = await service.create_metadata_table(table_data, current_user.id)
+        # 创建元数据表
+        db_table = await service.create_metadata_table(resource_id, table_data, current_user.id)
+
+        # 如果提供了字段信息，则同时创建字段
+        if table_data.columns:
+            for column_data in table_data.columns:
+                await service.create_table_column(db_table.id, column_data)
+            
+            # 重新获取包含字段的表信息
+            db_table = await service.get_metadata_table(db_table.id)
+        
         table_read = MetaDataTableRead.model_validate(db_table)
         return BaseResponse[MetaDataTableRead](data=table_read)
     except Exception as e:
