@@ -108,21 +108,10 @@ async def create_data_connection(
     """
     # 生成资源ID
     resource_id = uuid.uuid4()
-    print('创建新的数据连接器', resource_id, data_connection.name, current_user.id)
-
-    # 先创建资源记录
-    # resource_service = ResourcesService(db)
-    # resources = await resource_service.create_resource(
-    #     resource_id=resource_id,
-    #     name=data_connection.name,
-    #     type=ResourcesType.CONNECTOR,
-    #     user_id=current_user.id,
-    #     state=ResourcesState.PENDING
-    # )
 
     # 使用 DataConnectionService 创建连接器
     connection_service = DataConnectionService(db)
-    db_connection = await connection_service.create_data_connection(data_connection, id=resource_id)
+    db_connection = await connection_service.create_data_connection(data_connection, connection_id=resource_id, user_id=current_user.id)
 
     return BaseResponse[DataConnectionRead](data=db_connection)
 
@@ -163,16 +152,10 @@ async def read_data_connection(
     if connection is None or connection.type.value != ResourcesType.CONNECTOR.value:
         raise HTTPException(status_code=404, detail="Data connection not found")
     
-    # 获取具体的连接器信息
-    result = await db.execute(
-        select(DataBaseConnection).where(DataBaseConnection.id == connection_id)
-    )
-    db_connection = result.scalar_one_or_none()
-    if not db_connection:
-        raise HTTPException(status_code=404, detail="Data connection not found")
     
-    connection_read = DataConnectionRead.model_validate(db_connection)
-    return BaseResponse[DataConnectionRead](data=connection_read)
+    connection = await DataConnectionService(db).get_data_connection(connection_id)
+    
+    return BaseResponse[DataConnectionRead](data=DataConnectionRead.model_validate(connection))
 
 @router.put("/connectors/{connection_id}", response_model=BaseResponse[DataConnectionRead])
 async def update_data_connection(

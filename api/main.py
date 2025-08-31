@@ -1,10 +1,9 @@
 from fastapi import FastAPI
-from app.router import auth as auth_router
-from app.router import resources as resources_router
-from app.router import workspace as workspace_router
+from app.router import auth, resources, workspace
+from app.router.metadata import router as metadata_router
 from typing import Union
 from app.config.settings import settings
-from app.config.db import engine,Base
+from app.config.db import engine, Base
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 
@@ -19,7 +18,11 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     Base.metadata.create_all(engine)
     yield
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    version=settings.VERSION,
+    description=settings.DESCRIPTION
+)
 
 # 添加 CORS 中间件，解决跨域请求问题
 app.add_middleware(
@@ -30,16 +33,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(auth_router.router, prefix="/auth", tags=["auth"])
-app.include_router(resources_router.router, prefix="/resources", tags=["resources"])
-app.include_router(workspace_router.router, prefix="/workspace", tags=["workspace"])
+app.include_router(auth.router, prefix="/auth", tags=["auth"])
+app.include_router(resources.router, prefix="/resources", tags=["resources"])
+app.include_router(workspace.router, prefix="/workspaces", tags=["workspace"])
+app.include_router(metadata_router, prefix="/resources", tags=["metadata"])
 
 @app.get("/")
-def read_root():
-    return {
-        "Hello": "World"
-    }
+async def root():
+    return {"message": "Welcome to Data Platform API"}
 
-@app.get("/items/{item_id}")
-def read_item(item_id: int, q: Union[str, None] = None):
-    return {"item_id": item_id, "q": q}
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

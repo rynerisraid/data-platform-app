@@ -5,6 +5,8 @@ from sqlalchemy.future import select
 from sqlalchemy import delete, update
 from app.models.connections import DataBaseConnection, ConnectionType, DataConnectionCreate, DataConnectionRead
 from app.config.settings import settings
+from app.models.resources import ResourcesState
+from app.utils.sercret import get_decrypted_password, set_encrypted_password
 
 class DataConnectionService:
     """
@@ -20,7 +22,11 @@ class DataConnectionService:
         """
         self.db = db
 
-    async def create_data_connection(self, data_connection: DataConnectionCreate, id: Optional[uuid.UUID] = None) -> DataConnectionRead:
+    async def create_data_connection(self, 
+                                     data_connection: DataConnectionCreate, 
+                                     connection_id: Optional[uuid.UUID] = None,
+                                     user_id: Optional[uuid.UUID] = None
+                                     ) -> DataConnectionRead:
         """
         创建新的数据连接记录
 
@@ -32,23 +38,27 @@ class DataConnectionService:
             DataConnectionRead: 创建后的数据连接读取模型
         """
         # 处理密码加密
+        encrypted_password = set_encrypted_password(
+            data_connection.password,
+            settings.DATASOURCE_KEY
+        ) if data_connection.password else None
+
         db_data_connection = DataBaseConnection(
-            id=id,
+            id=connection_id,
+            name=data_connection.name,    # 补全 resources
+            state=ResourcesState.PENDING, # 补全 resources
             db_type=data_connection.db_type,
             host=data_connection.host,
             port=data_connection.port,
             database=data_connection.database,
-            username=data_connection.username
+            username=data_connection.username,
+            created_by=user_id,
+            password=  encrypted_password
         )
-        if data_connection.password:
-            db_data_connection.set_encrypted_password(
-                data_connection.password, 
-                settings.DATASOURCE_KEY
-            )
+
         
         self.db.add(db_data_connection)
         await self.db.commit()
-        await self.db.refresh(db_data_connection)
         return DataConnectionRead.model_validate(db_data_connection)
 
     async def get_data_connection(self, connection_id: uuid.UUID) -> Optional[DataConnectionRead]:
@@ -64,9 +74,17 @@ class DataConnectionService:
         result = await self.db.execute(
             select(DataBaseConnection).where(DataBaseConnection.id == connection_id)
         )
-        data_connection = result.scalar_one_or_none()
+        data_connection = DataConnectionRead.model_validate(
+            result.scalar_one_or_none()
+        )
+
+        # data_connection.password = get_decrypted_password(
+        #     data_connection.password,
+        #     settings.DATASOURCE_KEY
+        # )
+
         if data_connection:
-            return DataConnectionRead.model_validate(data_connection)
+            return data_connection
         return None
 
     async def get_data_connections(self, skip: int = 0, limit: int = 100) -> List[DataConnectionRead]:

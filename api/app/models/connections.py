@@ -61,6 +61,7 @@ class DataConnectionRead(BaseModel):
     port: Optional[int] = None
     database: Optional[str] = None
     username: Optional[str] = None
+    password: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -79,51 +80,7 @@ class DataBaseConnection(Resources):
     # Store encrypted password for database connections
     password = Column(String, nullable=True)  # For database connections
 
-    def set_encrypted_password(self, password: str, encryption_key: Optional[str] = None):
-        """
-        Encrypt and store the password for database connections.
-        If encryption_key is provided, store an encrypted version for database connections.
-        """
-        if password and encryption_key:
-            try:
-                # Simple XOR encryption with key - for demonstration purposes
-                # In production, you should use a proper encryption library
-                key_bytes = encryption_key.encode('utf-8')
-                password_bytes = password.encode('utf-8')
-                encrypted_bytes = bytearray()
-                
-                for i in range(len(password_bytes)):
-                    encrypted_bytes.append(password_bytes[i] ^ key_bytes[i % len(key_bytes)])
-                
-                self.password = base64.b64encode(encrypted_bytes).decode('utf-8')
-            except Exception:
-                # If encryption fails, store as None
-                self.password = None
-        else:
-            self.password = None
-
-    def get_decrypted_password(self, encryption_key: str) -> str | None:
-        """
-        Decrypt and return the original password for connecting to other databases.
-        This requires an encryption key to decrypt the stored password.
-        """
-        if self.password is None or encryption_key is None:
-            return None
-        
-        try:
-            # Simple XOR decryption with key
-            key_bytes = encryption_key.encode('utf-8')
-            encrypted_bytes = base64.b64decode(self.password.encode('utf-8'))
-            decrypted_bytes = bytearray()
-            
-            for i in range(len(encrypted_bytes)):
-                decrypted_bytes.append(encrypted_bytes[i] ^ key_bytes[i % len(key_bytes)])
-            
-            return decrypted_bytes.decode('utf-8')
-        except Exception:
-            # If decryption fails, return None
-            return None
-
+    
     def get_id(self):
         return str(self.id)
 

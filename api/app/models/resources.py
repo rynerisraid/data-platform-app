@@ -20,6 +20,7 @@ class ResourcesType(str, enum.Enum):
     CONNECTOR = "connector"
     COMPUTE_NODE = "compute_node"
     METADATA = "metadata"
+    CATALOG = 'catalog'
 
 
 # 资源状态
@@ -36,7 +37,7 @@ class Resources(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String(255), nullable=False)
     type = Column(Enum(ResourcesType), nullable=False)
-    state = Column(Enum(ResourcesState), nullable=False)
+    state = Column(Enum(ResourcesState), nullable=False) # TODO: 这里可能要添加默认值
     created_by = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.now)
     updated_at = Column(DateTime, default=datetime.datetime.now, onupdate=datetime.datetime.now)

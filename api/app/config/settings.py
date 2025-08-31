@@ -14,6 +14,11 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
+
+    PROJECT_NAME: str = "Data Platform App"
+    VERSION: str = "1.0.0"
+    DESCRIPTION: str = "API for managing metadata resources"
+
     class Config:
         env_file = ".env"
 
